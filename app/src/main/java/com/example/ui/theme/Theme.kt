@@ -1,52 +1,78 @@
 package com.example.ui.theme
 
-import android.os.Build
-import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Shapes
 import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.dynamicDarkColorScheme
-import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
 
-private val DarkColorScheme =
-  darkColorScheme(primary = Purple80, secondary = PurpleGrey80, tertiary = Pink80)
+private val NabraDarkColorScheme = darkColorScheme(
+    primary = AmberGold,
+    onPrimary = Color(0xFF1A1100),
+    primaryContainer = AmberGoldSoft,
+    onPrimaryContainer = AmberGoldLight,
+    secondary = AcousticTeal,
+    onSecondary = Color(0xFF00201C),
+    secondaryContainer = AcousticTealSoft,
+    onSecondaryContainer = AcousticTeal,
+    tertiary = AmberGoldLight,
+    background = ObsidianBg,
+    onBackground = InkWhite,
+    surface = ObsidianSurface,
+    onSurface = InkWhite,
+    surfaceVariant = ObsidianSurfaceHigh,
+    onSurfaceVariant = InkMuted,
+    surfaceContainerLow = ObsidianSurface,
+    surfaceContainer = ObsidianSurfaceHigh,
+    surfaceContainerHigh = ObsidianSurfaceHighest,
+    outline = ObsidianOutline,
+    outlineVariant = Color(0xFF1F2836),
+    error = RecordingCoral,
+    onError = Color.White,
+    errorContainer = RecordingCoralSoft,
+    onErrorContainer = Color(0xFFFFDAD9)
+)
 
-private val LightColorScheme =
-  lightColorScheme(
-    primary = Purple40,
-    secondary = PurpleGrey40,
-    tertiary = Pink40,
-
-    /* Other default colors to override
-    background = Color(0xFFFFFBFE),
-    surface = Color(0xFFFFFBFE),
+private val NabraLightColorScheme = lightColorScheme(
+    primary = AmberDark,
     onPrimary = Color.White,
+    primaryContainer = Color(0xFFFFE5B8),
+    onPrimaryContainer = Color(0xFF331D00),
+    secondary = TealDark,
     onSecondary = Color.White,
-    onTertiary = Color.White,
-    onBackground = Color(0xFF1C1B1F),
-    onSurface = Color(0xFF1C1B1F),
-    */
-  )
+    secondaryContainer = Color(0xFFCCFBF1),
+    onSecondaryContainer = Color(0xFF042F2E),
+    background = LightBg,
+    onBackground = LightInk,
+    surface = LightSurface,
+    onSurface = LightInk,
+    surfaceVariant = LightSurfaceHigh,
+    onSurfaceVariant = LightInkMuted,
+    outline = Color(0xFFD0D7E2),
+    error = Color(0xFFD92D20),
+    onError = Color.White
+)
+
+private val NabraShapes = Shapes(
+    small = RoundedCornerShape(10.dp),
+    medium = RoundedCornerShape(16.dp),
+    large = RoundedCornerShape(22.dp),
+    extraLarge = RoundedCornerShape(28.dp)
+)
 
 @Composable
-fun MyApplicationTheme(
-  darkTheme: Boolean = isSystemInDarkTheme(),
-  // Dynamic color is available on Android 12+
-  dynamicColor: Boolean = true,
-  content: @Composable () -> Unit,
+fun NabraTheme(
+    darkTheme: Boolean = true,
+    content: @Composable () -> Unit
 ) {
-  val colorScheme =
-    when {
-      dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
-        val context = LocalContext.current
-        if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-      }
-
-      darkTheme -> DarkColorScheme
-      else -> LightColorScheme
-    }
-
-  MaterialTheme(colorScheme = colorScheme, typography = Typography, content = content)
+    val colorScheme = if (darkTheme) NabraDarkColorScheme else NabraLightColorScheme
+    MaterialTheme(
+        colorScheme = colorScheme,
+        typography = NabraTypography,
+        shapes = NabraShapes,
+        content = content
+    )
 }

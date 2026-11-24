@@ -1,0 +1,129 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global default deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidFormatStyle(style) {
+      return style in ['RAW', 'CLEAN_PARAGRAPHS', 'MEETING_NOTES', 'BULLET_SUMMARY'];
+    }
+
+    function isValidTranscript(data, userId) {
+      return data.userId is string && data.userId == userId &&
+             data.title is string && data.title.size() >= 1 && data.title.size() <= 120 &&
+             data.rawText is string && data.rawText.size() >= 1 && data.rawText.size() <= 50000 &&
+             (!('organizedText' in data) || (data.organizedText is string && data.organizedText.size() <= 60000)) &&
+             data.language is string && data.language.size() >= 1 && data.language.size() <= 20 &&
+             data.formatStyle is string && isValidFormatStyle(data.formatStyle) &&
+             data.durationSeconds is int && data.durationSeconds >= 0 && data.durationSeconds <= 86400 &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidVoiceProfile(data, userId) {
+      return data.userId is string && data.userId == userId &&
+             data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 60 &&
+             data.baseVoiceName is string && data.baseVoiceName.size() >= 1 && data.baseVoiceName.size() <= 40 &&
+             data.toneDescription is string && data.toneDescription.size() <= 500 &&
+             data.deliveryStyle is string && data.deliveryStyle.size() <= 300 &&
+             data.pitchShift is number && data.pitchShift >= 0.7 && data.pitchShift <= 1.4 &&
+             data.speechRate is number && data.speechRate >= 0.7 && data.speechRate <= 1.4 &&
+             data.sampleDurationSeconds is int && data.sampleDurationSeconds >= 0 && data.sampleDurationSeconds <= 120 &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidGeneratedSpeech(data, userId) {
+      return data.userId is string && data.userId == userId &&
+             data.text is string && data.text.size() >= 1 && data.text.size() <= 5000 &&
+             data.voiceProfileName is string && data.voiceProfileName.size() >= 1 && data.voiceProfileName.size() <= 60 &&
+             data.baseVoiceName is string && data.baseVoiceName.size() >= 1 && data.baseVoiceName.size() <= 40 &&
+             data.pitchShift is number && data.pitchShift >= 0.7 && data.pitchShift <= 1.4 &&
+             data.speechRate is number && data.speechRate >= 0.7 && data.speechRate <= 1.4 &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    match /users/{userId}/transcripts/{transcriptId} {
+      allow list: if isOwner(userId);
+      allow get: if isOwner(userId) && isValidId(transcriptId);
+
+      allow create: if isOwner(userId) &&
+                       isValidId(transcriptId) &&
+                       incoming().keys().hasAll(['userId', 'title', 'rawText', 'language', 'formatStyle', 'durationSeconds', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['userId', 'title', 'rawText', 'organizedText', 'language', 'formatStyle', 'durationSeconds', 'createdAt', 'updatedAt']) &&
+                       isValidTranscript(incoming(), userId);
+
+      allow update: if isOwner(userId) &&
+                       isValidId(transcriptId) &&
+                       isValidTranscript(incoming(), userId) &&
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['title', 'rawText', 'organizedText', 'language', 'formatStyle', 'durationSeconds', 'updatedAt']);
+
+      allow delete: if isOwner(userId) && isValidId(transcriptId);
+    }
+
+    match /users/{userId}/voiceProfiles/{profileId} {
+      allow list: if isOwner(userId);
+      allow get: if isOwner(userId) && isValidId(profileId);
+
+      allow create: if isOwner(userId) &&
+                       isValidId(profileId) &&
+                       incoming().keys().hasAll(['userId', 'displayName', 'baseVoiceName', 'toneDescription', 'deliveryStyle', 'pitchShift', 'speechRate', 'sampleDurationSeconds', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['userId', 'displayName', 'baseVoiceName', 'toneDescription', 'deliveryStyle', 'pitchShift', 'speechRate', 'sampleDurationSeconds', 'createdAt', 'updatedAt']) &&
+                       isValidVoiceProfile(incoming(), userId);
+
+      allow update: if isOwner(userId) &&
+                       isValidId(profileId) &&
+                       isValidVoiceProfile(incoming(), userId) &&
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'baseVoiceName', 'toneDescription', 'deliveryStyle', 'pitchShift', 'speechRate', 'sampleDurationSeconds', 'updatedAt']);
+
+      allow delete: if isOwner(userId) && isValidId(profileId);
+    }
+
+    match /users/{userId}/generatedSpeeches/{speechId} {
+      allow list: if isOwner(userId);
+      allow get: if isOwner(userId) && isValidId(speechId);
+
+      allow create: if isOwner(userId) &&
+                       isValidId(speechId) &&
+                       incoming().keys().hasAll(['userId', 'text', 'voiceProfileName', 'baseVoiceName', 'pitchShift', 'speechRate', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['userId', 'text', 'voiceProfileName', 'baseVoiceName', 'pitchShift', 'speechRate', 'createdAt', 'updatedAt']) &&
+                       isValidGeneratedSpeech(incoming(), userId);
+
+      allow update: if isOwner(userId) &&
+                       isValidId(speechId) &&
+                       isValidGeneratedSpeech(incoming(), userId) &&
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['text', 'voiceProfileName', 'baseVoiceName', 'pitchShift', 'speechRate', 'updatedAt']);
+
+      allow delete: if isOwner(userId) && isValidId(speechId);
+    }
+  }
+}

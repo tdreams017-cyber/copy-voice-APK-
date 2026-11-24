@@ -1,0 +1,157 @@
+{
+  "entities": {
+    "TranscriptNote": {
+      "title": "TranscriptNote",
+      "description": "An Arabic or multilingual audio transcription note saved by the user, with optional AI-organized text for export.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Authenticated Firebase UID of the owner."
+        },
+        "title": {
+          "type": "string",
+          "description": "Title of the transcript note."
+        },
+        "rawText": {
+          "type": "string",
+          "description": "Verbatim transcribed text produced by gemini-3.5-transcribe."
+        },
+        "organizedText": {
+          "type": "string",
+          "description": "Structured and formatted text ready for organized text file export."
+        },
+        "language": {
+          "type": "string",
+          "description": "Detected or selected language code (e.g., ar, en, auto)."
+        },
+        "formatStyle": {
+          "type": "string",
+          "enum": ["RAW", "CLEAN_PARAGRAPHS", "MEETING_NOTES", "BULLET_SUMMARY"],
+          "description": "Organization format applied to the transcript."
+        },
+        "durationSeconds": {
+          "type": "integer",
+          "description": "Recorded audio duration in seconds."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when created (FieldValue.serverTimestamp())."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when last updated (FieldValue.serverTimestamp())."
+        }
+      },
+      "required": ["userId", "title", "rawText", "language", "formatStyle", "durationSeconds", "createdAt", "updatedAt"]
+    },
+    "VoiceProfile": {
+      "title": "VoiceProfile",
+      "description": "User vocal signature profile derived from a voice sample recording for personalized speech synthesis.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Authenticated Firebase UID of the owner."
+        },
+        "displayName": {
+          "type": "string",
+          "description": "Name of the voice profile."
+        },
+        "baseVoiceName": {
+          "type": "string",
+          "description": "Matched Gemini TTS voice persona identifier."
+        },
+        "toneDescription": {
+          "type": "string",
+          "description": "Analyzed acoustic timbre, pitch register, and accent notes."
+        },
+        "deliveryStyle": {
+          "type": "string",
+          "description": "Delivery style instructions used during speech generation."
+        },
+        "pitchShift": {
+          "type": "number",
+          "description": "Playback pitch multiplier (0.7 to 1.4)."
+        },
+        "speechRate": {
+          "type": "number",
+          "description": "Playback speed multiplier (0.7 to 1.4)."
+        },
+        "sampleDurationSeconds": {
+          "type": "integer",
+          "description": "Duration of the analyzed reference recording in seconds."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when created (FieldValue.serverTimestamp())."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when last updated (FieldValue.serverTimestamp())."
+        }
+      },
+      "required": ["userId", "displayName", "baseVoiceName", "toneDescription", "deliveryStyle", "pitchShift", "speechRate", "sampleDurationSeconds", "createdAt", "updatedAt"]
+    },
+    "GeneratedSpeech": {
+      "title": "GeneratedSpeech",
+      "description": "History entry for text-to-speech synthesis generated in the user's configured voice profile.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Authenticated Firebase UID of the owner."
+        },
+        "text": {
+          "type": "string",
+          "description": "Input text synthesized into speech."
+        },
+        "voiceProfileName": {
+          "type": "string",
+          "description": "Voice profile label used for synthesis."
+        },
+        "baseVoiceName": {
+          "type": "string",
+          "description": "Gemini TTS voice persona used."
+        },
+        "pitchShift": {
+          "type": "number",
+          "description": "Pitch multiplier applied."
+        },
+        "speechRate": {
+          "type": "number",
+          "description": "Speech rate multiplier applied."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when created (FieldValue.serverTimestamp())."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when updated (FieldValue.serverTimestamp())."
+        }
+      },
+      "required": ["userId", "text", "voiceProfileName", "baseVoiceName", "pitchShift", "speechRate", "createdAt", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}/transcripts/{transcriptId}": {
+      "schema": { "$ref": "#/entities/TranscriptNote" },
+      "description": "Saved audio transcription notes belonging to the authenticated user."
+    },
+    "/users/{userId}/voiceProfiles/{profileId}": {
+      "schema": { "$ref": "#/entities/VoiceProfile" },
+      "description": "Saved personal voice profiles analyzed from user recordings."
+    },
+    "/users/{userId}/generatedSpeeches/{speechId}": {
+      "schema": { "$ref": "#/entities/GeneratedSpeech" },
+      "description": "Saved history of text-to-speech generations."
+    }
+  }
+}
