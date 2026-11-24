@@ -25,6 +25,48 @@ enum class AudioLanguageOption(val code: String, val labelAr: String) {
     ENGLISH("en", "English")
 }
 
+enum class AudioExportFormat(
+    val extension: String,
+    val mimeType: String,
+    val labelAr: String,
+    val descriptionAr: String
+) {
+    WAV("wav", "audio/wav", "WAV", "جودة استوديو أصلية بدون ضغط"),
+    MP3("mp3", "audio/mpeg", "MP3", "صيغة مضغوطة خفيفة ومتوافقة مع كل الأجهزة")
+}
+
+enum class DetectedEmotion(
+    val labelAr: String,
+    val deliveryCueAr: String,
+    val pitchDelta: Double,
+    val rateDelta: Double,
+    val depthDelta: Double
+) {
+    HAPPY("سعيد", "بنبرة مبتهجة ودافئة وحيوية واضحة", 0.06, 0.06, -0.08),
+    SAD("حزين", "بنبرة خافتة متأثرة وحزينة وبإيقاع متمهل", -0.06, -0.10, 0.14),
+    ANGRY("غاضب", "بنبرة قوية وحازمة ومشددة وبإيقاع حاد", 0.04, 0.08, 0.22),
+    EXCITED("متحمس", "بنبرة حماسية مشرقة وسريعة ومتدفقة", 0.08, 0.11, -0.05),
+    CALM("هادئ", "بنبرة هادئة ومريحة وواثقة وإيقاع متزن", -0.02, -0.05, 0.12),
+    SERIOUS("جاد", "بنبرة رصينة ورسمية وواضحة ومؤكدة", -0.03, -0.02, 0.18),
+    QUESTIONING("متسائل", "بنبرة مستفهمة صاعدة في نهاية الجمل", 0.05, 0.02, 0.0),
+    NEUTRAL("محايد", "بنبرة طبيعية واضحة ومتزنة", 0.0, 0.0, 0.0);
+
+    companion object {
+        fun fromRaw(raw: String?): DetectedEmotion {
+            return entries.firstOrNull { it.name.equals(raw, ignoreCase = true) } ?: NEUTRAL
+        }
+    }
+}
+
+data class EmotionAnalysis(
+    val emotion: DetectedEmotion = DetectedEmotion.NEUTRAL,
+    val intensity: Double = 0.65,
+    val deliveryCueAr: String = DetectedEmotion.NEUTRAL.deliveryCueAr,
+    val suggestedPitchDelta: Double = 0.0,
+    val suggestedRateDelta: Double = 0.0,
+    val suggestedDepthDelta: Double = 0.0
+)
+
 @Keep
 @IgnoreExtraProperties
 data class TranscriptNote(
@@ -55,9 +97,12 @@ data class VoiceProfile(
     val displayName: String = "",
     val baseVoiceName: String = "Charon",
     val toneDescription: String = "",
+    val dialectNotes: String = "",
     val deliveryStyle: String = "",
+    val clonedVoiceId: String? = null,
     val pitchShift: Double = 1.0,
     val speechRate: Double = 1.0,
+    val voiceDepth: Double = 0.0,
     val sampleDurationSeconds: Long = 0L,
     @ServerTimestamp val createdAt: Timestamp? = null,
     @ServerTimestamp val updatedAt: Timestamp? = null
@@ -71,8 +116,10 @@ data class GeneratedSpeech(
     val text: String = "",
     val voiceProfileName: String = "",
     val baseVoiceName: String = "Charon",
+    val detectedEmotion: String = DetectedEmotion.NEUTRAL.name,
     val pitchShift: Double = 1.0,
     val speechRate: Double = 1.0,
+    val voiceDepth: Double = 0.0,
     @ServerTimestamp val createdAt: Timestamp? = null,
     @ServerTimestamp val updatedAt: Timestamp? = null
 )

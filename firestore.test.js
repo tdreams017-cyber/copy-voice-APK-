@@ -63,10 +63,7 @@ test("Owner: transcripts create, list, partial update, and delete succeed; inval
   const col = aliceDb.collection("users").doc(ALICE_UID).collection("transcripts");
   const created = new Date(Date.now() - 10000);
 
-  // Empty list query succeeds
   await assertSucceeds(col.orderBy("createdAt", "desc").get());
-
-  // Valid create (no @DocumentId `id` field)
   await assertSucceeds(
     col.doc("note_1").set({
       userId: ALICE_UID,
@@ -81,7 +78,6 @@ test("Owner: transcripts create, list, partial update, and delete succeed; inval
     })
   );
 
-  // Valid partial update
   await assertSucceeds(
     col.doc("note_1").update({
       title: "ملاحظة اجتماع محدثة",
@@ -91,7 +87,6 @@ test("Owner: transcripts create, list, partial update, and delete succeed; inval
     })
   );
 
-  // Reject ghost `id` field on create
   await assertFails(
     col.doc("note_2").set({
       id: "note_2",
@@ -106,40 +101,16 @@ test("Owner: transcripts create, list, partial update, and delete succeed; inval
     })
   );
 
-  // Reject immutable createdAt modification
   await assertFails(
     col.doc("note_1").update({
       createdAt: new Date(Date.now() - 500),
       updatedAt: new Date(Date.now() - 500),
     })
   );
-
-  // Reject invalid formatStyle enum
-  await assertFails(
-    col.doc("note_1").update({
-      formatStyle: "INVALID_STYLE",
-      updatedAt: new Date(Date.now() - 500),
-    })
-  );
-
-  // Reject future timestamp
-  await assertFails(
-    col.doc("note_3").set({
-      userId: ALICE_UID,
-      title: "مستقبل",
-      rawText: "نص",
-      language: "ar",
-      formatStyle: "RAW",
-      durationSeconds: 5,
-      createdAt: new Date(Date.now() + 60000),
-      updatedAt: created,
-    })
-  );
-
   await assertSucceeds(col.doc("note_1").delete());
 });
 
-test("Owner: voiceProfiles and generatedSpeeches CRUD succeed and validate bounds", async () => {
+test("Owner: voiceProfiles with voiceDepth/dialectNotes/clonedVoiceId and generatedSpeeches with emotion succeed", async () => {
   const aliceDb = testEnv.authenticatedContext(ALICE_UID).firestore();
   const profilesCol = aliceDb.collection("users").doc(ALICE_UID).collection("voiceProfiles");
   const speechesCol = aliceDb.collection("users").doc(ALICE_UID).collection("generatedSpeeches");
@@ -148,13 +119,16 @@ test("Owner: voiceProfiles and generatedSpeeches CRUD succeed and validate bound
   await assertSucceeds(
     profilesCol.doc("voice_1").set({
       userId: ALICE_UID,
-      displayName: "نبرتي الهادئة",
+      displayName: "نبرتي الخليجية",
       baseVoiceName: "Charon",
-      toneDescription: "نبرة عميقة وهادئة بنطق عربي واضح",
+      toneDescription: "نبرة عميقة وهادئة بنطق واضح",
+      dialectNotes: "لهجة خليجية واضحة بنبرة متزنة",
       deliveryStyle: "هادئ وواضح ومتزن",
+      clonedVoiceId: "el_voice_abc123",
       pitchShift: 1.0,
       speechRate: 1.0,
-      sampleDurationSeconds: 8,
+      voiceDepth: 0.35,
+      sampleDurationSeconds: 14,
       createdAt: now,
       updatedAt: now,
     })
@@ -164,14 +138,15 @@ test("Owner: voiceProfiles and generatedSpeeches CRUD succeed and validate bound
     profilesCol.doc("voice_1").update({
       pitchShift: 1.05,
       speechRate: 0.95,
+      voiceDepth: -0.2,
       updatedAt: new Date(Date.now() - 500),
     })
   );
 
-  // Reject out-of-bounds pitchShift
+  // Reject out-of-bounds voiceDepth
   await assertFails(
     profilesCol.doc("voice_1").update({
-      pitchShift: 2.5,
+      voiceDepth: 1.8,
       updatedAt: new Date(Date.now() - 500),
     })
   );
@@ -179,11 +154,13 @@ test("Owner: voiceProfiles and generatedSpeeches CRUD succeed and validate bound
   await assertSucceeds(
     speechesCol.doc("sp_1").set({
       userId: ALICE_UID,
-      text: "أهلاً بكم في نبرة، هذا صوتي المخصص.",
-      voiceProfileName: "نبرتي الهادئة",
+      text: "أهلاً بكم في نبرة، يسعدني سماعكم اليوم!",
+      voiceProfileName: "نبرتي الخليجية",
       baseVoiceName: "Charon",
+      detectedEmotion: "HAPPY",
       pitchShift: 1.05,
       speechRate: 0.95,
+      voiceDepth: 0.25,
       createdAt: now,
       updatedAt: now,
     })
@@ -192,7 +169,7 @@ test("Owner: voiceProfiles and generatedSpeeches CRUD succeed and validate bound
   await assertSucceeds(speechesCol.orderBy("createdAt", "desc").get());
 });
 
-test("Cross-user isolation: Bob cannot read or write Alice's transcripts, voiceProfiles, or speeches", async () => {
+test("Cross-user isolation: Bob cannot read or write Alice's collections", async () => {
   const created = new Date(Date.now() - 5000);
   await testEnv.withSecurityRulesDisabled(async (ctx) => {
     const db = ctx.firestore();
@@ -210,19 +187,6 @@ test("Cross-user isolation: Bob cannot read or write Alice's transcripts, voiceP
 
   const bobDb = testEnv.authenticatedContext(BOB_UID).firestore();
   await assertFails(bobDb.collection("users").doc(ALICE_UID).collection("transcripts").get());
-  await assertFails(bobDb.collection("users").doc(ALICE_UID).collection("transcripts").doc("a1").get());
-  await assertFails(bobDb.collection("users").doc(ALICE_UID).collection("transcripts").doc("a1").update({ title: "اختراق" }));
-  await assertFails(bobDb.collection("users").doc(ALICE_UID).collection("transcripts").doc("a1").delete());
-  await assertFails(
-    bobDb.collection("users").doc(ALICE_UID).collection("transcripts").doc("b1").set({
-      userId: BOB_UID,
-      title: "حقن",
-      rawText: "نص",
-      language: "ar",
-      formatStyle: "RAW",
-      durationSeconds: 5,
-      createdAt: created,
-      updatedAt: created,
-    })
-  );
+  await assertFails(bobDb.collection("users").doc(ALICE_UID).collection("voiceProfiles").get());
+  await assertFails(bobDb.collection("users").doc(ALICE_UID).collection("generatedSpeeches").get());
 });

@@ -65,10 +65,12 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.example.ai.NabraAiService
+import com.example.ai.VoiceCloneApiClient
 import com.example.audio.AudioPlayerManager
 import com.example.audio.AudioRecorderManager
 import com.example.auth.AuthScreen
 import com.example.auth.signOutUser
+import com.example.data.ApiKeyPreferences
 import com.example.data.NabraRepository
 import com.example.ui.NabraViewModel
 import com.example.ui.screens.LibraryScreen
@@ -173,6 +175,8 @@ fun NabraAuthenticatedShell(currentUserId: String) {
                 NabraViewModel(
                     repository = NabraRepository(db),
                     aiService = NabraAiService(),
+                    voiceCloneClient = VoiceCloneApiClient(),
+                    apiKeyPreferences = ApiKeyPreferences(app.applicationContext),
                     recorder = AudioRecorderManager(app.applicationContext),
                     player = AudioPlayerManager(app.applicationContext),
                     currentUserId = currentUserId

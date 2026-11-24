@@ -82,17 +82,17 @@ class NabraRepository(
             val docRef = db.collection("users").document(uid).collection("transcripts").document()
             docPath = docRef.path
 
-            val payload = mutableMapOf<String, Any?>(
-                "userId" to uid,
-                "title" to cleanTitle,
-                "rawText" to cleanRaw,
-                "organizedText" to cleanOrganized,
-                "language" to cleanLang,
-                "formatStyle" to formatStyle.name,
-                "durationSeconds" to safeDuration,
-                "createdAt" to FieldValue.serverTimestamp(),
-                "updatedAt" to FieldValue.serverTimestamp()
-            ).filterValues { it != null } as Map<String, Any>
+            val payload = buildMap<String, Any> {
+                put("userId", uid)
+                put("title", cleanTitle)
+                put("rawText", cleanRaw)
+                if (!cleanOrganized.isNullOrEmpty()) put("organizedText", cleanOrganized)
+                put("language", cleanLang)
+                put("formatStyle", formatStyle.name)
+                put("durationSeconds", safeDuration)
+                put("createdAt", FieldValue.serverTimestamp())
+                put("updatedAt", FieldValue.serverTimestamp())
+            }
 
             docRef.set(payload).await()
             Result.success(docRef.id)
@@ -191,9 +191,12 @@ class NabraRepository(
         displayName: String,
         baseVoiceName: String,
         toneDescription: String,
+        dialectNotes: String,
         deliveryStyle: String,
+        clonedVoiceId: String?,
         pitchShift: Double,
         speechRate: Double,
+        voiceDepth: Double,
         sampleDurationSeconds: Long
     ): Result<String> {
         var docPath = "users/${auth.currentUser?.uid ?: "unauthenticated"}/voiceProfiles"
@@ -202,18 +205,22 @@ class NabraRepository(
             val docRef = db.collection("users").document(uid).collection("voiceProfiles").document()
             docPath = docRef.path
 
-            val payload = mapOf(
-                "userId" to uid,
-                "displayName" to displayName.trim().ifEmpty { "نبرتي الشخصية" }.take(60),
-                "baseVoiceName" to baseVoiceName.trim().ifEmpty { "Charon" }.take(40),
-                "toneDescription" to toneDescription.trim().take(500),
-                "deliveryStyle" to deliveryStyle.trim().take(300),
-                "pitchShift" to pitchShift.coerceIn(0.7, 1.4),
-                "speechRate" to speechRate.coerceIn(0.7, 1.4),
-                "sampleDurationSeconds" to sampleDurationSeconds.coerceIn(0L, 120L),
-                "createdAt" to FieldValue.serverTimestamp(),
-                "updatedAt" to FieldValue.serverTimestamp()
-            )
+            val payload = buildMap<String, Any> {
+                put("userId", uid)
+                put("displayName", displayName.trim().ifEmpty { "نبرتي الشخصية" }.take(60))
+                put("baseVoiceName", baseVoiceName.trim().ifEmpty { "Charon" }.take(40))
+                put("toneDescription", toneDescription.trim().take(500))
+                put("dialectNotes", dialectNotes.trim().take(300))
+                put("deliveryStyle", deliveryStyle.trim().take(300))
+                val cleanCloneId = clonedVoiceId?.trim()?.take(128)
+                if (!cleanCloneId.isNullOrEmpty()) put("clonedVoiceId", cleanCloneId)
+                put("pitchShift", pitchShift.coerceIn(0.7, 1.4))
+                put("speechRate", speechRate.coerceIn(0.7, 1.4))
+                put("voiceDepth", voiceDepth.coerceIn(-1.0, 1.0))
+                put("sampleDurationSeconds", sampleDurationSeconds.coerceIn(0L, 600L))
+                put("createdAt", FieldValue.serverTimestamp())
+                put("updatedAt", FieldValue.serverTimestamp())
+            }
             docRef.set(payload).await()
             Result.success(docRef.id)
         } catch (e: CancellationException) {
@@ -228,7 +235,8 @@ class NabraRepository(
         profileId: String,
         baseVoiceName: String,
         pitchShift: Double,
-        speechRate: Double
+        speechRate: Double,
+        voiceDepth: Double
     ): Result<Unit> {
         var docPath = "users/${auth.currentUser?.uid ?: "unauthenticated"}/voiceProfiles/$profileId"
         return try {
@@ -242,6 +250,7 @@ class NabraRepository(
                     "baseVoiceName" to baseVoiceName.trim().ifEmpty { "Charon" }.take(40),
                     "pitchShift" to pitchShift.coerceIn(0.7, 1.4),
                     "speechRate" to speechRate.coerceIn(0.7, 1.4),
+                    "voiceDepth" to voiceDepth.coerceIn(-1.0, 1.0),
                     "updatedAt" to FieldValue.serverTimestamp()
                 )
             ).await()
@@ -303,8 +312,10 @@ class NabraRepository(
         text: String,
         voiceProfileName: String,
         baseVoiceName: String,
+        detectedEmotion: DetectedEmotion,
         pitchShift: Double,
-        speechRate: Double
+        speechRate: Double,
+        voiceDepth: Double
     ): Result<Unit> {
         var docPath = "users/${auth.currentUser?.uid ?: "unauthenticated"}/generatedSpeeches"
         return try {
@@ -319,8 +330,10 @@ class NabraRepository(
                     "text" to cleanText,
                     "voiceProfileName" to voiceProfileName.trim().ifEmpty { "نبرتي" }.take(60),
                     "baseVoiceName" to baseVoiceName.trim().ifEmpty { "Charon" }.take(40),
+                    "detectedEmotion" to detectedEmotion.name,
                     "pitchShift" to pitchShift.coerceIn(0.7, 1.4),
                     "speechRate" to speechRate.coerceIn(0.7, 1.4),
+                    "voiceDepth" to voiceDepth.coerceIn(-1.0, 1.0),
                     "createdAt" to FieldValue.serverTimestamp(),
                     "updatedAt" to FieldValue.serverTimestamp()
                 )

@@ -93,7 +93,7 @@ fun TranscribeScreen(
     val elapsedSeconds by viewModel.recordingElapsedSeconds.collectAsStateWithLifecycle()
     val voiceState by viewModel.voiceStudio.collectAsStateWithLifecycle()
 
-    val isTranscribeRecording = isRecording && !voiceState.isRecordingSample
+    val isTranscribeRecording = isRecording && !voiceState.isRecordingSample && !voiceState.isRecordingTtsMic
     var permissionDeniedNotice by remember { mutableStateOf(false) }
 
     val micPermissionLauncher = rememberLauncherForActivityResult(

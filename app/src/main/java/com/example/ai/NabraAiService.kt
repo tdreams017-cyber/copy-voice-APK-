@@ -1,7 +1,10 @@
 package com.example.ai
 
 import android.util.Log
+import com.example.audio.AudioDspProcessor
 import com.example.data.AudioLanguageOption
+import com.example.data.DetectedEmotion
+import com.example.data.EmotionAnalysis
 import com.example.data.TranscriptFormatStyle
 import com.example.data.VoiceProfile
 import com.google.firebase.Firebase
@@ -19,21 +22,22 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.withTimeout
 import org.json.JSONObject
-import java.io.ByteArrayOutputStream
-import java.nio.ByteBuffer
-import java.nio.ByteOrder
 
 data class AnalyzedVoiceTraits(
     val baseVoiceName: String,
     val toneDescription: String,
+    val dialectNotes: String,
     val deliveryStyle: String,
     val recommendedPitch: Double,
-    val recommendedRate: Double
+    val recommendedRate: Double,
+    val recommendedDepth: Double
 )
 
 data class SynthesizedAudio(
-    val wavBytes: ByteArray,
-    val mimeType: String
+    val rawWavBytes: ByteArray,
+    val playbackWavBytes: ByteArray,
+    val mimeType: String,
+    val usedClonedVoice: Boolean = false
 )
 
 enum class TtsVoicePreset(
@@ -59,6 +63,39 @@ class NabraAiService {
         Firebase.ai.generativeModel(modelName = "gemini-3.8-flash")
     }
 
+    private val emotionAnalyzerModel by lazy {
+        val schema = Schema.obj(
+            properties = mapOf(
+                "emotion" to Schema.enumeration(
+                    values = DetectedEmotion.entries.map { it.name },
+                    description = "Dominant emotion detected in the text."
+                ),
+                "intensity" to Schema.double(
+                    description = "Emotional intensity between 0.25 and 1.0."
+                ),
+                "deliveryCueAr" to Schema.string(
+                    description = "Concise Arabic vocal acting direction describing how the speaker should deliver the text."
+                ),
+                "suggestedPitchDelta" to Schema.double(
+                    description = "Subtle pitch offset between -0.10 and 0.10."
+                ),
+                "suggestedRateDelta" to Schema.double(
+                    description = "Subtle speaking speed offset between -0.14 and 0.14."
+                ),
+                "suggestedDepthDelta" to Schema.double(
+                    description = "Subtle vocal chest depth offset between -0.25 and 0.30."
+                )
+            )
+        )
+        Firebase.ai.generativeModel(
+            modelName = "gemini-3.8-flash",
+            generationConfig = generationConfig {
+                responseMimeType = "application/json"
+                responseSchema = schema
+            }
+        )
+    }
+
     private val voiceAnalyzerModel by lazy {
         val schema = Schema.obj(
             properties = mapOf(
@@ -69,6 +106,9 @@ class NabraAiService {
                 "toneDescription" to Schema.string(
                     description = "Arabic summary (1-2 sentences) describing the speaker's vocal pitch, warmth, clarity, and speaking pace."
                 ),
+                "dialectNotes" to Schema.string(
+                    description = "Arabic description of the speaker's dialect/accent (e.g. خليجي، مصري، شامي، فصحى) and distinctive cadence."
+                ),
                 "deliveryStyle" to Schema.string(
                     description = "Concise Arabic style instructions for TTS delivery matching this voice."
                 ),
@@ -77,6 +117,9 @@ class NabraAiService {
                 ),
                 "recommendedRate" to Schema.double(
                     description = "Recommended speaking rate multiplier between 0.85 and 1.20 (1.0 is neutral)."
+                ),
+                "recommendedDepth" to Schema.double(
+                    description = "Recommended vocal depth/bass resonance between -0.60 and 0.60 (0.0 is neutral)."
                 )
             )
         )
@@ -178,13 +221,50 @@ class NabraAiService {
         }
     }
 
+    suspend fun analyzeTextEmotion(text: String): EmotionAnalysis {
+        val cleanText = text.trim()
+        if (cleanText.isEmpty()) return EmotionAnalysis()
+
+        return try {
+            val response = withTimeout(25_000L) {
+                emotionAnalyzerModel.generateContent(
+                    "حلّل المشاعر السائدة في النص التالي بدقة لتوجيه نبرة الإلقاء الصوتي (السعادة، الحزن، الغضب، الحماس، الهدوء، الجدية، التساؤل، أو الحياد). أعد النتيجة بصيغة JSON:\n$cleanText"
+                )
+            }
+            val jsonText = response.text?.trim().orEmpty()
+            if (jsonText.isEmpty()) return EmotionAnalysis()
+
+            val json = JSONObject(jsonText)
+            val emotion = DetectedEmotion.fromRaw(json.optString("emotion"))
+            val intensity = json.optDouble("intensity", 0.65).coerceIn(0.25, 1.0)
+            val cue = json.optString("deliveryCueAr").ifBlank { emotion.deliveryCueAr }
+            val pitchDelta = json.optDouble("suggestedPitchDelta", emotion.pitchDelta).coerceIn(-0.10, 0.10)
+            val rateDelta = json.optDouble("suggestedRateDelta", emotion.rateDelta).coerceIn(-0.14, 0.14)
+            val depthDelta = json.optDouble("suggestedDepthDelta", emotion.depthDelta).coerceIn(-0.25, 0.30)
+
+            EmotionAnalysis(
+                emotion = emotion,
+                intensity = intensity,
+                deliveryCueAr = cue,
+                suggestedPitchDelta = pitchDelta,
+                suggestedRateDelta = rateDelta,
+                suggestedDepthDelta = depthDelta
+            )
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "Emotion analysis fallback to neutral", e)
+            EmotionAnalysis()
+        }
+    }
+
     suspend fun analyzeVoiceSample(
         audioBytes: ByteArray,
         mimeType: String
     ): AnalyzedVoiceTraits {
         require(audioBytes.isNotEmpty()) { "التسجيل الصوتي فارغ." }
         require(audioBytes.size < MAX_INLINE_AUDIO_BYTES) {
-            "حجم عينة الصوت كبير جداً، يُفضّل تسجيل 5 إلى 20 ثانية."
+            "حجم عينة الصوت كبير جداً، يُفضّل مقطع بين 5 إلى 30 ثانية."
         }
 
         val response = withTimeout(AI_TIMEOUT_MS) {
@@ -192,7 +272,7 @@ class NabraAiService {
                 content {
                     inlineData(audioBytes, mimeType)
                     text(
-                        "حلّل الخصائص الصوتية للمتحدث في هذه العينة (طبقة الصوت، الدفء، السرعة، وضوح المخارج) واختر أقرب صوت أساسي من القائمة المتاحة مع معامل طبقة الصوت والسرعة باللغة العربية."
+                        "حلّل الخصائص الصوتية للمتحدث في هذه العينة الصوتية بدقة (طبقة الصوت، عمق الرخامة، الدفء، السرعة، واللهجة العربية أو اللكنة وطريقة النطق)، واختر أقرب صوت أساسي مع القيم المقترحة للطبقة والسرعة والعمق."
                     )
                 }
             )
@@ -206,26 +286,58 @@ class NabraAiService {
             .takeIf { candidate -> TtsVoicePreset.entries.any { it.voiceId == candidate } }
             ?: "Charon"
         val toneDesc = json.optString("toneDescription", "نبرة واضحة ومتزنة")
+        val dialectNotes = json.optString("dialectNotes", "عربية واضحة بطابع شخصي متزن")
         val style = json.optString("deliveryStyle", "نطق عربي واضح وهادئ")
         val pitch = json.optDouble("recommendedPitch", 1.0).coerceIn(0.75, 1.35)
         val rate = json.optDouble("recommendedRate", 1.0).coerceIn(0.80, 1.25)
+        val depth = json.optDouble("recommendedDepth", 0.0).coerceIn(-0.65, 0.65)
 
         return AnalyzedVoiceTraits(
             baseVoiceName = voice,
             toneDescription = toneDesc,
+            dialectNotes = dialectNotes,
             deliveryStyle = style,
             recommendedPitch = pitch,
-            recommendedRate = rate
+            recommendedRate = rate,
+            recommendedDepth = depth
         )
     }
 
     @OptIn(PublicPreviewAPI::class)
     suspend fun synthesizeSpeech(
         text: String,
-        profile: VoiceProfile
+        profile: VoiceProfile,
+        emotionAnalysis: EmotionAnalysis,
+        effectiveDepth: Double,
+        customApiKey: String,
+        voiceCloneClient: VoiceCloneApiClient
     ): SynthesizedAudio {
         val cleanText = text.trim()
         require(cleanText.isNotEmpty()) { "أدخل النص الذي تريد تحويله إلى كلام." }
+
+        val cloneId = profile.clonedVoiceId?.trim().orEmpty()
+        if (cloneId.isNotEmpty() && customApiKey.isNotBlank()) {
+            val apiResult = voiceCloneClient.synthesizeWithClonedVoice(
+                apiKey = customApiKey,
+                voiceId = cloneId,
+                text = cleanText,
+                emotion = emotionAnalysis.emotion,
+                intensity = emotionAnalysis.intensity
+            )
+            val rawClonedWav = apiResult.getOrElse { throw it }
+            val playbackWav = AudioDspProcessor.processForVoiceCharacteristics(
+                wavBytes = rawClonedWav,
+                voiceDepth = effectiveDepth,
+                pitchForExport = 1.0,
+                rateForExport = 1.0
+            )
+            return SynthesizedAudio(
+                rawWavBytes = rawClonedWav,
+                playbackWavBytes = playbackWav,
+                mimeType = "audio/wav",
+                usedClonedVoice = true
+            )
+        }
 
         val ttsModel = Firebase.ai.generativeModel(
             modelName = "gemini-3.1-flash-tts-preview",
@@ -237,8 +349,16 @@ class NabraAiService {
             }
         )
 
-        val directedPrompt = if (profile.deliveryStyle.isNotBlank()) {
-            "اقرأ النص التالي بنبرة (${profile.deliveryStyle}) وبوضوح تام دون إضافة أي كلمات:\n$cleanText"
+        val actingDirections = buildList {
+            if (emotionAnalysis.deliveryCueAr.isNotBlank()) add(emotionAnalysis.deliveryCueAr)
+            if (profile.dialectNotes.isNotBlank()) add("محاكاة اللهجة والأسلوب: ${profile.dialectNotes}")
+            if (profile.deliveryStyle.isNotBlank()) add(profile.deliveryStyle)
+            if (effectiveDepth > 0.25) add("بصوت عميق ورخيم")
+            else if (effectiveDepth < -0.25) add("بصوت خفيف ومشرق")
+        }.joinToString("، ")
+
+        val directedPrompt = if (actingDirections.isNotBlank()) {
+            "اقرأ النص التالي بأداء تمثيلي متقن ($actingDirections) دون إضافة أو حذف أي كلمات:\n$cleanText"
         } else {
             cleanText
         }
@@ -255,16 +375,28 @@ class NabraAiService {
             ?.firstOrNull { it.mimeType.startsWith("audio/") && it.inlineData.isNotEmpty() }
             ?: throw IllegalStateException("لم يولّد النموذج مخرجاً صوتياً، حاول نصاً أقصر أو واضحاً.")
 
-        val rawBytes = audioPart.inlineData
-        val mime = audioPart.mimeType
-        val playableWav = ensurePlayableWav(rawBytes, mime)
+        val rawWav = ensurePlayableWav(audioPart.inlineData, audioPart.mimeType)
+        val playbackWav = AudioDspProcessor.processForVoiceCharacteristics(
+            wavBytes = rawWav,
+            voiceDepth = effectiveDepth,
+            pitchForExport = 1.0,
+            rateForExport = 1.0
+        )
+
+        val resolvedMime = if (
+            audioPart.mimeType.contains("pcm", ignoreCase = true) ||
+            audioPart.mimeType.contains("L16", ignoreCase = true)
+        ) {
+            "audio/wav"
+        } else {
+            audioPart.mimeType
+        }
+
         return SynthesizedAudio(
-            wavBytes = playableWav,
-            mimeType = if (mime.contains("pcm", ignoreCase = true) || mime.contains("L16", ignoreCase = true)) {
-                "audio/wav"
-            } else {
-                mime
-            }
+            rawWavBytes = rawWav,
+            playbackWavBytes = playbackWav,
+            mimeType = resolvedMime,
+            usedClonedVoice = false
         )
     }
 
@@ -291,35 +423,7 @@ class NabraAiService {
             ?.toIntOrNull()
             ?: 24_000
 
-        return wrapPcm16MonoAsWav(bytes, sampleRate)
-    }
-
-    private fun wrapPcm16MonoAsWav(pcmData: ByteArray, sampleRate: Int): ByteArray {
-        val channels = 1
-        val bitsPerSample = 16
-        val byteRate = sampleRate * channels * bitsPerSample / 8
-        val blockAlign = channels * bitsPerSample / 8
-        val dataSize = pcmData.size
-        val chunkSize = 36 + dataSize
-
-        val out = ByteArrayOutputStream(44 + dataSize)
-        val header = ByteBuffer.allocate(44).order(ByteOrder.LITTLE_ENDIAN)
-        header.put("RIFF".toByteArray(Charsets.US_ASCII))
-        header.putInt(chunkSize)
-        header.put("WAVE".toByteArray(Charsets.US_ASCII))
-        header.put("fmt ".toByteArray(Charsets.US_ASCII))
-        header.putInt(16) // PCM subchunk size
-        header.putShort(1) // AudioFormat = 1 (PCM)
-        header.putShort(channels.toShort())
-        header.putInt(sampleRate)
-        header.putInt(byteRate)
-        header.putShort(blockAlign.toShort())
-        header.putShort(bitsPerSample.toShort())
-        header.put("data".toByteArray(Charsets.US_ASCII))
-        header.putInt(dataSize)
-        out.write(header.array())
-        out.write(pcmData)
-        return out.toByteArray()
+        return AudioDspProcessor.wrapPcm16MonoAsWav(bytes, sampleRate)
     }
 
     private companion object {

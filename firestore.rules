@@ -1,7 +1,6 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Global default deny catch-all
     match /{document=**} {
       allow read, write: if false;
     }
@@ -47,10 +46,13 @@ service cloud.firestore {
              data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 60 &&
              data.baseVoiceName is string && data.baseVoiceName.size() >= 1 && data.baseVoiceName.size() <= 40 &&
              data.toneDescription is string && data.toneDescription.size() <= 500 &&
+             data.dialectNotes is string && data.dialectNotes.size() <= 300 &&
              data.deliveryStyle is string && data.deliveryStyle.size() <= 300 &&
+             (!('clonedVoiceId' in data) || (data.clonedVoiceId is string && data.clonedVoiceId.size() <= 128)) &&
              data.pitchShift is number && data.pitchShift >= 0.7 && data.pitchShift <= 1.4 &&
              data.speechRate is number && data.speechRate >= 0.7 && data.speechRate <= 1.4 &&
-             data.sampleDurationSeconds is int && data.sampleDurationSeconds >= 0 && data.sampleDurationSeconds <= 120 &&
+             data.voiceDepth is number && data.voiceDepth >= -1.0 && data.voiceDepth <= 1.0 &&
+             data.sampleDurationSeconds is int && data.sampleDurationSeconds >= 0 && data.sampleDurationSeconds <= 600 &&
              data.createdAt is timestamp && data.createdAt <= request.time &&
              data.updatedAt is timestamp && data.updatedAt <= request.time;
     }
@@ -60,8 +62,10 @@ service cloud.firestore {
              data.text is string && data.text.size() >= 1 && data.text.size() <= 5000 &&
              data.voiceProfileName is string && data.voiceProfileName.size() >= 1 && data.voiceProfileName.size() <= 60 &&
              data.baseVoiceName is string && data.baseVoiceName.size() >= 1 && data.baseVoiceName.size() <= 40 &&
+             data.detectedEmotion is string && data.detectedEmotion.size() >= 1 && data.detectedEmotion.size() <= 30 &&
              data.pitchShift is number && data.pitchShift >= 0.7 && data.pitchShift <= 1.4 &&
              data.speechRate is number && data.speechRate >= 0.7 && data.speechRate <= 1.4 &&
+             data.voiceDepth is number && data.voiceDepth >= -1.0 && data.voiceDepth <= 1.0 &&
              data.createdAt is timestamp && data.createdAt <= request.time &&
              data.updatedAt is timestamp && data.updatedAt <= request.time;
     }
@@ -92,8 +96,8 @@ service cloud.firestore {
 
       allow create: if isOwner(userId) &&
                        isValidId(profileId) &&
-                       incoming().keys().hasAll(['userId', 'displayName', 'baseVoiceName', 'toneDescription', 'deliveryStyle', 'pitchShift', 'speechRate', 'sampleDurationSeconds', 'createdAt', 'updatedAt']) &&
-                       incoming().keys().hasOnly(['userId', 'displayName', 'baseVoiceName', 'toneDescription', 'deliveryStyle', 'pitchShift', 'speechRate', 'sampleDurationSeconds', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasAll(['userId', 'displayName', 'baseVoiceName', 'toneDescription', 'dialectNotes', 'deliveryStyle', 'pitchShift', 'speechRate', 'voiceDepth', 'sampleDurationSeconds', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['userId', 'displayName', 'baseVoiceName', 'toneDescription', 'dialectNotes', 'deliveryStyle', 'clonedVoiceId', 'pitchShift', 'speechRate', 'voiceDepth', 'sampleDurationSeconds', 'createdAt', 'updatedAt']) &&
                        isValidVoiceProfile(incoming(), userId);
 
       allow update: if isOwner(userId) &&
@@ -101,7 +105,7 @@ service cloud.firestore {
                        isValidVoiceProfile(incoming(), userId) &&
                        incoming().userId == existing().userId &&
                        incoming().createdAt == existing().createdAt &&
-                       incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'baseVoiceName', 'toneDescription', 'deliveryStyle', 'pitchShift', 'speechRate', 'sampleDurationSeconds', 'updatedAt']);
+                       incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'baseVoiceName', 'toneDescription', 'dialectNotes', 'deliveryStyle', 'clonedVoiceId', 'pitchShift', 'speechRate', 'voiceDepth', 'sampleDurationSeconds', 'updatedAt']);
 
       allow delete: if isOwner(userId) && isValidId(profileId);
     }
@@ -112,8 +116,8 @@ service cloud.firestore {
 
       allow create: if isOwner(userId) &&
                        isValidId(speechId) &&
-                       incoming().keys().hasAll(['userId', 'text', 'voiceProfileName', 'baseVoiceName', 'pitchShift', 'speechRate', 'createdAt', 'updatedAt']) &&
-                       incoming().keys().hasOnly(['userId', 'text', 'voiceProfileName', 'baseVoiceName', 'pitchShift', 'speechRate', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasAll(['userId', 'text', 'voiceProfileName', 'baseVoiceName', 'detectedEmotion', 'pitchShift', 'speechRate', 'voiceDepth', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['userId', 'text', 'voiceProfileName', 'baseVoiceName', 'detectedEmotion', 'pitchShift', 'speechRate', 'voiceDepth', 'createdAt', 'updatedAt']) &&
                        isValidGeneratedSpeech(incoming(), userId);
 
       allow update: if isOwner(userId) &&
@@ -121,7 +125,7 @@ service cloud.firestore {
                        isValidGeneratedSpeech(incoming(), userId) &&
                        incoming().userId == existing().userId &&
                        incoming().createdAt == existing().createdAt &&
-                       incoming().diff(existing()).affectedKeys().hasOnly(['text', 'voiceProfileName', 'baseVoiceName', 'pitchShift', 'speechRate', 'updatedAt']);
+                       incoming().diff(existing()).affectedKeys().hasOnly(['text', 'voiceProfileName', 'baseVoiceName', 'detectedEmotion', 'pitchShift', 'speechRate', 'voiceDepth', 'updatedAt']);
 
       allow delete: if isOwner(userId) && isValidId(speechId);
     }
