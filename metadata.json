@@ -1,0 +1,6 @@
+{
+  "name": "نبرة",
+  "description": "تطبيق عربي لنسخ الصوت إلى نص وتنظيمه في ملفات نصية مع ميزة تحويل النص إلى كلام بصوتك.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
